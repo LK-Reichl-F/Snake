@@ -1,0 +1,303 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Snake</title>
+	</head>
+	<body>
+	  <div id="Punktzahl">
+	    
+	  </div>
+	  <canvas id="spielfeld" width="800" height="600">
+      Sorry, aber Dein Browser unterstützt kein HTML5 - kein Spiel möglich.
+    </canvas>
+    <button onclick="neustart();">Neustart</button>
+    
+    <script>
+		  "use strict";
+      
+      // Diese Funktion ist ein Konstruktor für Schlangen-Objekte.
+      // Ein Schlangenobjekt enthält alle Informationen (Attribut) über eine Schlange:
+      // - wo ist der Kopf: kopfX, kopfY
+      // - in welche Richtung bewegt sich die Schlange: vX, vY
+      // - wo überall ist die Schlange: puffer
+      // Ein Schlangeobjekt hat Funktionen (Methoden), die:
+      // - welche die Richtung der Schlange ändern: nachOben, nachUnten, nachLinks, nachRechts
+      // - die Schlange bewegt. Das heißt die neuen Koordinaten des Kopfes werden ausgerechnet.
+      //   Das Ende der Schlange wird aus dem Puffer geholt.
+      //   Auf dem Spielfeld der Kopf neu gezeichnet und das Ende der Schlange gelöscht.
+      //   Die Funktion heißt bewegDich.
+      // - die Schlange verlängern, in dem die Koordinate des Kopfes mehrfach in den
+      //   Puffer eingetragen wird: verlängern
+      function Schlange (spielfeld){
+        this.spielfeld = spielfeld;
+        this.reset=function() {
+          this.kopfX = 0;
+          this.kopfY = 0;
+          this.vX = 1;
+          this.vY = 0;
+          this.puffer = new Ringpuffer(4800);
+        };
+        this.reset();
+        this.nachOben = function(){
+          if(this.vY != 1){
+            this.vX = 0;
+            this.vY = -1;
+          }
+        }
+        this.nachUnten = function(){
+          if(this.vY != -1){
+            this.vX = 0;
+            this.vY = 1;
+          }
+        }
+        this.nachLinks = function(){
+          if(this.vX != 1){  
+            this.vX = -1;
+            this.vY =  0;
+          }
+        }
+        this.nachRechts = function(){
+          if(this.vX != -1){
+            this.vX = 1;
+            this.vY = 0;
+          }
+        }
+        this.bewegDich = function(){
+          var ende = this.puffer.lesen();
+          this.spielfeld.löschen(ende.x, ende.y);
+          this.kopfX += this.vX;
+          this.kopfY += this.vY;
+          this.spielfeld.einfügenSchlange(this.kopfX,this.kopfY);
+          this.puffer.schreiben({x:this.kopfX, y:this.kopfY});
+        }
+        this.verlängern = function(länge){
+          for (var i = 0; i<länge; i++ ){
+             this.puffer.schreiben({x:this.kopfX, y:this.kopfY});
+          }
+        }
+      }
+      
+      // Diese Funktion ist der Konstruktor für unser Spielfeld-Objekt.
+      // Die Parameter sind folgende:
+      // - kontext: Das ist die Schnittstelle zum Canvas auf den wir zeichnen.
+      // - auflösungX und auflösungY: Dies sind die Pixel die der Canvas groß ist.
+      // - feldX und feldY: Die Anzahl der Spielfelder auf denen sich die Schlange
+      //   bewegt.
+      // - spieleController: Dieser ist wichtig, damit das Spielfeld das Spiel
+      //   beenden kann, wenn es einen Zusammenstoß der Schlange mit dem Spielfeldrand
+      //   oder der Schlange selbst gibt.
+      // Attribute:
+      // - größeX und größeY: Die Größe eines Spielfelds in Pixeln.
+      // - karte: Dies ist ein Array aus Arrays. Dies muss in einer Schleife
+      //   angelegt werden. Ziel ist es, ein Array zu bekommen, dass man in 
+      //   der Form karte[x][y] ansprechen kann. In die Karte wird eingetragen,
+      //   was sich an dem jeweiligen Spielfeld befindet.
+      // Methoden:
+      // - reset: Dies löscht den Canvas und die Karte
+      // - löschen: Löscht den Eintrag an der angegebenen Koordinate in Karte und auf dem Canvas
+      // - einfügenFutter: Zeichnet Futter in die Karte und den Canvas ein.
+      // - einfügenSchlange: Zeichnet die Schlange in Canvas und Karte ein. Überprüft aber auch,
+      //   ob die Schlange stirbt weil sie das Spielfeld verlässt oder sich selbst verletzt.
+      
+      function Spielfeld (kontext, auflösungX, auflösungY, feldX, feldY, spieleController){
+        this.kontext = kontext;
+        this.auflösungX = auflösungX;     // Größe des Canvas in Pixel
+        this.auflösungY = auflösungY;
+        this.feldX = feldX;               // Anzahl der Felder in X-Richtung
+        this.feldY = feldY;               // Anzahl der Felder in Y-Richtung
+        this.größeX = Math.floor(this.auflösungX / this.feldX);   // Größe eines Feldes
+        this.größeY = Math.floor(this.auflösungY / this.feldY);
+        // Anlegen der Karte:
+        this.karte = new Array(this.feldX);
+        for (var i=0; i<this.feldX; i++) {
+          this.karte[i] = new Array(this.feldY);
+        }
+        
+        this.setSchlange = function(schlange) {
+          this.schlange = schlange;
+        };
+        
+        this.reset = function (hintergrund){
+          this.punkte=0;
+          document.getElementById("Punktzahl").innerHTML=this.punkte;
+          // Canvas löschen:
+          this.hintergrund = hintergrund;
+          this.kontext.fillStyle =  hintergrund; 
+          this.kontext.fillRect(0, 0, this.auflösungX, this.auflösungY);
+          // Karte löschen:
+          for (var x=0; x<this.feldX; x++) {    
+            for (var y=0; y<this.feldY; y++) {
+              this.karte[x][y] = undefined;
+            }
+          }
+          this.einfügenFutter();
+        };
+        
+        this.löschen = function (x, y){
+          this.kontext.fillStyle = this.hintergrund;
+          this.kontext.fillRect(x*this.größeX, y*this.größeY, this.größeX, this.größeY);
+          this.karte[x][y]=undefined;
+        };
+        
+        this.einfügenFutter = function (){
+          do{
+            var x = Math.floor(Math.random()*feldX);
+            var y = Math.floor(Math.random()*feldY);
+          }while(this.karte[x][y] != undefined);
+          this.kontext.fillStyle = "rgb(255,255,0)";
+          this.kontext.fillRect(x*this.größeX, y*this.größeY, this.größeX, this.größeY);
+          this.karte[x][y]="Futter";
+        };
+        
+        this.einfügenSchlange = function (x, y){
+          if (x<0 || x>=this.feldX || y<0 || y>=this.feldY 
+                  || this.karte[x][y]=="Schlange") {
+            spieleController.stop();
+            return;
+          }
+          if (this.karte[x][y] == "Futter"){
+            this.punkte++;
+            document.getElementById("Punktzahl").innerHTML=this.punkte;
+            this.schlange.verlängern(10);
+            spieleController.schneller();
+            this.einfügenFutter();
+            this.einfügenFutter();
+          }
+          this.karte[x][y]="Schlange";
+          this.kontext.fillStyle = "rgb(30,220,0)";
+          this.kontext.fillRect(x*this.größeX, y*this.größeY, this.größeX-1, this.größeY-1);
+        };
+      }
+		  
+		  // Der Ringpuffer ist ein Hilfsobjekt für die Schlange.
+		  // Sie speichert dort die Positionen, auf denen eine Schlange zu sehen ist.
+		  // Attribute:
+		  // - puffer: Ein Array, das alle Elemente enthält.
+		  // - schreibzeiger: Die Position, an der als nächstes geschrieben wird.
+		  // - lesezeiger: Position, an der als nächstes aus dem Puffer gelesen wird.
+		  // - inhalt: Anzahl der Elemente im Puffer
+		  // Methoden:
+		  // - schreiben: Dies fügt ein neues Element in den Ringpuffer ein.
+		  // - lesen: Dies gibt ein Element aus dem Ringpuffer zurück und vergisst es.
+		  function Ringpuffer (größe) {
+        this.puffer = new Array(größe);
+        this.schreibzeiger = 0;
+        this.lesezeiger = 0;
+        this.inhalt = 0;
+        
+        this.schreiben = function (element){
+          if (this.inhalt == this.puffer.length){
+            console.log("Puffer VOLL");
+            return;
+          }
+          this.puffer[this.schreibzeiger] = element;
+          this.inhalt = this.inhalt + 1;
+          this.schreibzeiger = this.schreibzeiger + 1;
+          if(this.schreibzeiger == this.puffer.length){
+           this.schreibzeiger = 0;
+          }
+        };
+        
+        this.lesen = function (){
+          if(this.inhalt == 0){
+            console.log ("Puffer ist leer");
+            return undefined;
+          }
+          this.inhalt = this.inhalt - 1;
+          var ergebnis=this.puffer[this.lesezeiger];
+          this.lesezeiger++
+          if(this.lesezeiger==this.puffer.length){
+            this.lesezeiger= 0
+          }
+          return ergebnis;
+        };
+      }
+      
+      var meinCanvas = document.getElementById("spielfeld");
+      var kontext = meinCanvas.getContext("2d");
+      
+      var spieleController = new SpieleController(kontext);
+      var spielfeld = new Spielfeld(kontext,meinCanvas.width, meinCanvas.height,
+                                    80, 60, spieleController);
+      spielfeld.reset("rgb(0,0,255)");
+      var schlange = new Schlange(spielfeld);
+      schlange.verlängern(10);
+      spielfeld.setSchlange(schlange);
+      spieleController.start();
+      
+      // Der SpieleController regelt den zeitlichen Ablauf im Spiel.
+      // Attribute:
+      // - kontext: Damit schreiben wir "Game over"
+      // - wartezeit: Dies ist die Wartezeit zwischen zwei Schritte in Millisekunden
+      // - spielLäuft: Diese Variable kennzeichnet, ob das Spiel gerade läuft oder beendet ist.
+      // Methoden:
+      // - action: Diese Methode führt den nächsten Spielschritt aus. Sie benötigt allerdings
+      //   den spieleControllerHelfer.
+      // - stop: Damit wird das Spiel beendet
+      // - start: Damit wird das Spiel gestartet
+      // - schneller: Damit wird die Wartezeit verkürzt
+      function SpieleController(kontext) {
+        this.kontext = kontext;
+        this.wartezeit = 50;
+        this.spielLäuft = false;
+        this.action = function() {
+          if (this.spielLäuft) {
+            schlange.bewegDich();
+            window.setTimeout(spieleControllerHelfer,this.wartezeit); // Problem mit this
+          }
+        }
+        this.stop = function() {
+          this.spielLäuft = false;
+          this.kontext.fillStyle="rgb(255,0,0)";
+          this.kontext.font = "156px serif";
+          this.kontext.fillText("Game over!", 13, 350);
+        }
+        this.start = function() {
+          this.spielLäuft = true;
+          this.wartezeit = 50;
+          this.action();
+        }
+        this.schneller = function() {
+          this.wartezeit /= 1.1;
+        }
+      }
+      
+      function spieleControllerHelfer() {
+        spieleController.action();
+      }
+      
+      // Diese Hilfsfunktion wird aufgerufen, wenn man eine Taste drückt.
+      document.onkeydown = function(einEvent) {
+        switch(einEvent.keyCode) {
+          case 87:
+          case 38:
+            schlange.nachOben();
+            break;
+          case 83:
+          case 40:
+            schlange.nachUnten();
+            break;
+          case 65:
+          case 37:
+            schlange.nachLinks();
+            break;
+          case 68:
+          case 39:
+            schlange.nachRechts();
+            break;
+          case 32:
+            schlange.verlängern(10);
+        }
+      }
+      
+      function neustart() {
+        spieleController.stop();
+        spielfeld.reset("rgb(0,0,255)");
+        schlange.reset();
+        schlange.verlängern(10);
+        spieleController.start();
+      }
+		</script>
+	</body>
+</html>
